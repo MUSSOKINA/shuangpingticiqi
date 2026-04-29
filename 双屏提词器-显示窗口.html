@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>提词器显示窗口</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            font-size: 16px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #000;
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            color: #fff;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .teleprompter-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            background: #ffffff;
+            position: relative;
+        }
+
+        .top-bar {
+            background: rgba(28, 28, 30, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: clamp(8px, 1.5vw, 12px) clamp(12px, 2vw, 20px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            z-index: 100;
+            transition: opacity 0.3s;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .top-bar:hover {
+            opacity: 1 !important;
+        }
+
+        .top-bar h1 {
+            font-size: clamp(12px, 1.5vw, 14px);
+            font-weight: 500;
+            color: #ffd966;
+        }
+
+        .connection-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: clamp(10px, 1.2vw, 12px);
+            color: #aaa;
+        }
+
+        .connection-dot {
+            width: clamp(6px, 1vw, 8px);
+            height: clamp(6px, 1vw, 8px);
+            border-radius: 50%;
+            background: #ff3b30;
+            flex-shrink: 0;
+        }
+
+        .connection-dot.connected {
+            background: #34c759;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .btn {
+            background: #3a3a4a;
+            border: none;
+            color: #fff;
+            padding: clamp(6px, 1vw, 8px) clamp(10px, 1.5vw, 16px);
+            border-radius: clamp(6px, 1vw, 8px);
+            font-size: clamp(11px, 1.3vw, 13px);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            min-height: 36px;
+            min-width: 44px;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .btn:hover {
+            background: #4a4a5a;
+        }
+
+        .btn:active {
+            background: #2a2a2a;
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background: #34c759;
+        }
+
+        .btn-primary:hover {
+            background: #30b753;
+        }
+
+        .script-area {
+            flex: 1;
+            background-color: transparent;
+            color: inherit;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: clamp(1rem, 3vw, 2rem) clamp(1.5rem, 4vw, 3rem);
+            font-size: clamp(18px, 2.5vw, 28px);
+            line-height: 1.6;
+            font-family: -apple-system, 'Helvetica Neue', 'Segoe UI', Roboto, system-ui;
+            transition: background-color 0.2s, color 0.2s, font-size 0.2s, transform 0.3s ease;
+            outline: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+            scroll-behavior: auto;
+            position: relative;
+            -webkit-overflow-scrolling: touch;
+            --translate: translate(0, 0);
+            --rotate: rotate(0deg);
+            --mirror: scale(1, 1);
+            transform: var(--translate) var(--rotate) var(--mirror);
+            transform-origin: center center;
+        }
+
+        .script-area.rotate-left,
+        .script-area.rotate-right {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: calc(100vh - 80px);
+            height: calc(100vw - 80px);
+            max-width: none;
+            max-height: none;
+            overflow: auto;
+            padding: clamp(1rem, 3vw, 2rem) clamp(1.5rem, 4vw, 3rem);
+        }
+
+        .script-area.rotate-left {
+            --translate: translate(-50%, -50%);
+            --rotate: rotate(-90deg);
+        }
+
+        .script-area.rotate-right {
+            --translate: translate(-50%, -50%);
+            --rotate: rotate(90deg);
+        }
+
+        .script-area.mirror-h { --mirror: scaleX(-1); }
+        .script-area.mirror-v { --mirror: scaleY(-1); }
+        .script-area.mirror-both { --mirror: scale(-1, -1); }
+
+        .guide-line-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        .guide-line {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            background: #ff3b30;
+            box-shadow: 0 0 6px rgba(255, 59, 48, 0.6);
+            transition: all 0.1s ease;
+        }
+
+        .guide-line.portrait {
+            width: 2px;
+            height: 100%;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .guide-line.style-dashed {
+            background: repeating-linear-gradient(90deg, #ffcc00, #ffcc00 12px, transparent 12px, transparent 24px);
+        }
+
+        .guide-line.style-dashed.portrait {
+            background: repeating-linear-gradient(0deg, #ffcc00, #ffcc00 12px, transparent 12px, transparent 24px);
+        }
+
+        .guide-line.style-double {
+            height: 4px;
+            background: transparent;
+            border-top: 2px solid #34c759;
+            border-bottom: 2px solid #34c759;
+            box-shadow: none;
+        }
+
+        .guide-line.style-double.portrait {
+            width: 4px;
+            height: 100%;
+            border-top: none;
+            border-bottom: none;
+            border-left: 2px solid #34c759;
+            border-right: 2px solid #34c759;
+        }
+
+        .guide-line.style-glow {
+            height: 3px;
+            background: #0a84ff;
+            box-shadow: 0 0 12px #0a84ff;
+        }
+
+        .guide-line.style-glow.portrait {
+            width: 3px;
+            height: 100%;
+            box-shadow: 0 0 12px #0a84ff;
+        }
+
+        .guide-line.hidden {
+            display: none;
+        }
+
+        .status-overlay {
+            position: fixed;
+            top: clamp(12px, 2vw, 20px);
+            right: clamp(40px, 8vw, 60px);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: clamp(6px, 1vw, 10px) clamp(10px, 2vw, 16px);
+            border-radius: clamp(8px, 1.5vw, 10px);
+            font-size: clamp(10px, 1.3vw, 12px);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            max-width: 90vw;
+        }
+
+        .status-overlay.show {
+            opacity: 1;
+        }
+
+        .instructions-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            text-align: center;
+            padding: clamp(20px, 5vw, 40px);
+        }
+
+        .instructions-overlay.hidden {
+            display: none;
+        }
+
+        .instructions-overlay h2 {
+            font-size: clamp(20px, 4vw, 28px);
+            color: #ffd966;
+            margin-bottom: clamp(12px, 2vw, 20px);
+        }
+
+        .instructions-overlay p {
+            font-size: clamp(12px, 2vw, 16px);
+            color: #aaa;
+            margin-bottom: clamp(8px, 1.5vw, 12px);
+            max-width: min(500px, 90vw);
+            line-height: 1.6;
+        }
+
+        .instructions-overlay .btn {
+            margin-top: clamp(16px, 3vw, 30px);
+            padding: clamp(10px, 2vw, 14px) clamp(20px, 4vw, 32px);
+            font-size: clamp(13px, 2vw, 16px);
+            min-height: 44px;
+        }
+
+        .hide-bar-btn {
+            position: fixed;
+            top: clamp(4px, 1vw, 8px);
+            right: clamp(4px, 1vw, 8px);
+            background: rgba(255,255,255,0.3);
+            border: none;
+            color: white;
+            width: clamp(28px, 5vw, 36px);
+            height: clamp(28px, 5vw, 36px);
+            border-radius: 50%;
+            font-size: clamp(14px, 2.5vw, 18px);
+            cursor: pointer;
+            z-index: 1001;
+            opacity: 0.6;
+            transition: opacity 0.2s, background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+            min-width: 44px;
+            min-height: 44px;
+        }
+
+        .hide-bar-btn:hover {
+            opacity: 1;
+            background: rgba(255,255,255,0.4);
+        }
+
+        .hide-bar-btn:active {
+            opacity: 1;
+            background: rgba(255,255,255,0.5);
+            transform: scale(0.95);
+        }
+
+        body.bar-hidden .top-bar {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .script-area p {
+            margin: 0.5em 0;
+        }
+
+        /* ========== 响应式断点 ========== */
+
+        @media (max-width: 992px) {
+            .top-bar {
+                padding: 8px 12px;
+            }
+            .top-bar h1 {
+                font-size: 12px;
+            }
+            .btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .top-bar {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 6px;
+            }
+            .top-bar h1 {
+                width: 100%;
+                text-align: center;
+                order: -1;
+            }
+            .connection-indicator {
+                order: 1;
+                flex: 1;
+                justify-content: center;
+            }
+            .top-bar > div:last-child {
+                order: 2;
+                flex: 1;
+                display: flex;
+                justify-content: center;
+            }
+            .hide-bar-btn {
+                width: 36px;
+                height: 36px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .top-bar {
+                padding: 6px 8px;
+            }
+            .top-bar h1 {
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+            .connection-indicator {
+                font-size: 10px;
+            }
+            .btn {
+                padding: 6px 10px;
+                font-size: 11px;
+                min-height: 40px;
+            }
+            .instructions-overlay h2 {
+                font-size: 18px;
+            }
+            .instructions-overlay p {
+                font-size: 13px;
+            }
+        }
+
+        @media (max-width: 375px) {
+            .top-bar h1 {
+                font-size: 10px;
+            }
+            .btn {
+                padding: 5px 8px;
+                font-size: 10px;
+            }
+        }
+
+        @media (max-height: 500px) and (orientation: landscape) {
+            .top-bar {
+                padding: 4px 10px;
+            }
+            .top-bar h1 {
+                font-size: 10px;
+            }
+            .instructions-overlay {
+                padding: 10px;
+            }
+            .instructions-overlay h2 {
+                font-size: 16px;
+                margin-bottom: 8px;
+            }
+            .instructions-overlay p {
+                font-size: 11px;
+                margin-bottom: 6px;
+            }
+            .instructions-overlay .btn {
+                margin-top: 10px;
+                padding: 8px 16px;
+                font-size: 12px;
+            }
+        }
+
+        @media (min-width: 1400px) {
+            .top-bar {
+                padding: 14px 24px;
+            }
+            .top-bar h1 {
+                font-size: 16px;
+            }
+            .btn {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            .script-area {
+                font-size: 32px;
+                padding: 2.5rem 4rem;
+            }
+            .script-area.portrait-mode {
+                font-size: 36px;
+            }
+        }
+
+        @media (min-width: 2000px) {
+            html {
+                font-size: 20px;
+            }
+            .script-area {
+                font-size: 40px;
+            }
+            .script-area.portrait-mode {
+                font-size: 44px;
+            }
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .btn {
+                min-height: 44px;
+                min-width: 44px;
+            }
+            .hide-bar-btn {
+                width: 44px;
+                height: 44px;
+            }
+            .script-area {
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        @media (prefers-contrast: high) {
+            .guide-line {
+                background: #ff0000;
+                box-shadow: 0 0 10px #ff0000;
+            }
+            .top-bar {
+                border-bottom: 2px solid #fff;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .instructions-overlay {
+                background: rgba(0,0,0,0.98);
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff;
+            }
+            .top-bar,
+            .hide-bar-btn,
+            .status-overlay,
+            .guide-line-container {
+                display: none !important;
+            }
+            .script-area {
+                font-size: 12pt;
+                color: #000;
+                background: #fff;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="instructions-overlay" id="instructionsOverlay">
+        <h2>📺 提词器显示窗口</h2>
+        <p>此窗口用于在第二屏幕显示提词内容</p>
+        <p>请从主屏幕的控制面板进行操作</p>
+        <p style="color: #ff9f0a;">💡 提示：将此窗口拖到第二屏幕后点击全屏按钮</p>
+        <button class="btn btn-primary" id="dismissInstructions">明白了，关闭提示</button>
+    </div>
+
+    <div class="teleprompter-container" id="teleprompterMain">
+        <div class="top-bar" id="topBar">
+            <h1>📺 提词器显示窗口</h1>
+            <div class="connection-indicator">
+                <div class="connection-dot" id="connectionDot"></div>
+                <span id="connectionText">等待控制面板连接...</span>
+            </div>
+            <div>
+                <button class="btn btn-primary" id="fullscreenBtn">🖥️ 全屏</button>
+            </div>
+        </div>
+        <button class="hide-bar-btn" id="hideBarBtn" title="隐藏/显示顶栏">👁</button>
+        
+        <div id="teleprompterText" class="script-area">
+            <div style="font-family: inherit; color: inherit;">
+                <h2 style="color:#2c7da0;">等待内容...</h2>
+                <p>请在主屏幕的控制面板中输入提词内容</p>
+            </div>
+        </div>
+        
+        <div class="guide-line-container" id="guideLineContainer">
+            <div class="guide-line" id="guideLine" style="top: 50%;"></div>
+        </div>
+    </div>
+
+    <div class="status-overlay" id="statusOverlay"></div>
+
+    <script>
+        (function() {
+            const channel = new BroadcastChannel('teleprompter_sync');
+            
+            const container = document.getElementById('teleprompterMain');
+            const scriptDiv = document.getElementById('teleprompterText');
+            const guideLine = document.getElementById('guideLine');
+            const guideLineContainer = document.getElementById('guideLineContainer');
+            const connectionDot = document.getElementById('connectionDot');
+            const connectionText = document.getElementById('connectionText');
+            const statusOverlay = document.getElementById('statusOverlay');
+            const instructionsOverlay = document.getElementById('instructionsOverlay');
+            const topBar = document.getElementById('topBar');
+            const hideBarBtn = document.getElementById('hideBarBtn');
+
+            let isConnected = false;
+            let currentSpeedPxPerSec = 128;
+            let animationId = null;
+            let isScrolling = false;
+            let lastTimestamp = 0;
+            let accumulatedDistance = 0;
+            let barHidden = false;
+            let currentOrientation = 'none';
+            let playMode = 'once';
+            let guidePosition = 50;
+
+            let lastOrientation = null;
+            let lastPlayMode = null;
+
+            if (localStorage.getItem('hideInstructions') === 'true') {
+                instructionsOverlay.classList.add('hidden');
+            }
+
+            document.getElementById('dismissInstructions').addEventListener('click', () => {
+                instructionsOverlay.classList.add('hidden');
+                localStorage.setItem('hideInstructions', 'true');
+            });
+
+            function notifyConnected() {
+                channel.postMessage({ type: 'connected' });
+            }
+
+            function sendDisplayMetrics() {
+                channel.postMessage({
+                    type: 'displayMetrics',
+                    data: {
+                        windowWidth: Math.round(window.innerWidth),
+                        windowHeight: Math.round(window.innerHeight),
+                        scriptWidth: Math.round(scriptDiv.clientWidth),
+                        scriptHeight: Math.round(scriptDiv.clientHeight),
+                        orientation: currentOrientation
+                    }
+                });
+            }
+
+            notifyConnected();
+            sendDisplayMetrics();
+
+            setInterval(() => {
+                if (isConnected) {
+                    channel.postMessage({ type: 'pong' });
+                    sendDisplayMetrics();
+                }
+                notifyConnected();
+            }, 2000);
+
+            function showStatus(message) {
+                statusOverlay.textContent = message;
+                statusOverlay.classList.add('show');
+                setTimeout(() => {
+                    statusOverlay.classList.remove('show');
+                }, 1500);
+            }
+
+            function mapSpeedToPxPerSec(level) {
+                const MIN_SPEED = 30;
+                const MAX_SPEED = 450;
+                const t = (level - 1) / 49;
+                return MIN_SPEED + t * (MAX_SPEED - MIN_SPEED);
+            }
+
+            function setOrientation(orientation) {
+                currentOrientation = orientation;
+                scriptDiv.classList.remove('rotate-left', 'rotate-right');
+                guideLine.classList.remove('portrait');
+                if (orientation === 'left') {
+                    scriptDiv.classList.add('rotate-left');
+                    updateGuidePosition(guidePosition);
+                } else if (orientation === 'right') {
+                    scriptDiv.classList.add('rotate-right');
+                    updateGuidePosition(guidePosition);
+                } else {
+                    // normal orientation, no rotation
+                    updateGuidePosition(guidePosition);
+                }
+                requestAnimationFrame(sendDisplayMetrics);
+            }
+
+            function updateGuidePosition(position) {
+                guidePosition = position;
+                if (currentOrientation === 'left') {
+                    guideLine.style.left = position + '%';
+                    guideLine.style.top = '0';
+                } else {
+                    guideLine.style.top = position + '%';
+                    guideLine.style.left = '0';
+                }
+            }
+
+            function performScrollHorizontal(now) {
+                if (!isScrolling) return;
+                
+                if (lastTimestamp === 0) {
+                    lastTimestamp = now;
+                    animationId = requestAnimationFrame(performScrollHorizontal);
+                    return;
+                }
+                
+                const deltaMs = Math.min(100, now - lastTimestamp);
+                const deltaSec = deltaMs / 1000;
+                lastTimestamp = now;
+                
+                let theoreticalMove = currentSpeedPxPerSec * deltaSec;
+                if (theoreticalMove <= 0) {
+                    animationId = requestAnimationFrame(performScrollHorizontal);
+                    return;
+                }
+                
+                accumulatedDistance += theoreticalMove;
+                let moveInt = Math.floor(accumulatedDistance);
+                
+                if (moveInt > 0) {
+                    accumulatedDistance -= moveInt;
+                    const maxScroll = scriptDiv.scrollWidth - scriptDiv.clientWidth;
+                    
+                    if (maxScroll <= 0) {
+                        handleNoScrollableContent();
+                        return;
+                    }
+                    
+                    let newScrollLeft = scriptDiv.scrollLeft + moveInt;
+                    if (newScrollLeft >= maxScroll) {
+                        handleScriptEnd();
+                        if (!isScrolling) return;
+                    } else {
+                        scriptDiv.scrollLeft = newScrollLeft;
+                    }
+                    
+                    const progress = maxScroll > 0 ? (scriptDiv.scrollLeft / maxScroll) : 0;
+                    channel.postMessage({
+                        type: 'scrollUpdate',
+                        data: {
+                            scrollTop: scriptDiv.scrollLeft,
+                            progress,
+                            orientation: currentOrientation
+                        }
+                    });
+                }
+                
+                if (isScrolling) {
+                    animationId = requestAnimationFrame(performScrollHorizontal);
+                }
+            }
+
+            function performScrollVertical(now) {
+                if (!isScrolling) return;
+                
+                if (lastTimestamp === 0) {
+                    lastTimestamp = now;
+                    animationId = requestAnimationFrame(performScrollVertical);
+                    return;
+                }
+                
+                const deltaMs = Math.min(100, now - lastTimestamp);
+                const deltaSec = deltaMs / 1000;
+                lastTimestamp = now;
+                
+                let theoreticalMove = currentSpeedPxPerSec * deltaSec;
+                if (theoreticalMove <= 0) {
+                    animationId = requestAnimationFrame(performScrollVertical);
+                    return;
+                }
+                
+                accumulatedDistance += theoreticalMove;
+                let moveInt = Math.floor(accumulatedDistance);
+                
+                if (moveInt > 0) {
+                    accumulatedDistance -= moveInt;
+                    const maxScroll = scriptDiv.scrollHeight - scriptDiv.clientHeight;
+                    
+                    if (maxScroll <= 0) {
+                        handleNoScrollableContent();
+                        return;
+                    }
+                    
+                    let newScrollTop = scriptDiv.scrollTop + moveInt;
+                    if (newScrollTop >= maxScroll) {
+                        handleScriptEnd();
+                        if (!isScrolling) return;
+                    } else {
+                        scriptDiv.scrollTop = newScrollTop;
+                    }
+                    
+                    const progress = maxScroll > 0 ? (scriptDiv.scrollTop / maxScroll) : 0;
+                    channel.postMessage({
+                        type: 'scrollUpdate',
+                        data: {
+                            scrollTop: scriptDiv.scrollTop,
+                            progress,
+                            orientation: currentOrientation
+                        }
+                    });
+                }
+                
+                if (isScrolling) {
+                    animationId = requestAnimationFrame(performScrollVertical);
+                }
+            }
+
+            function handleScriptEnd() {
+                if (playMode === 'singleLoop') {
+                    // 单条循环：滚动到末尾后立即回到开头并继续
+                    if (currentOrientation === 'left') {
+                        scriptDiv.scrollLeft = 0;
+                    } else {
+                        scriptDiv.scrollTop = 0;
+                    }
+                    accumulatedDistance = 0;
+                    lastTimestamp = 0;
+                    channel.postMessage({
+                        type: 'scrollUpdate',
+                        data: { scrollTop: 0, progress: 0, orientation: currentOrientation }
+                    });
+                    return;
+                }
+
+                // 单次播放：滚动到末尾后停止
+                if (playMode === 'once') {
+                    stopScroll();
+                    channel.postMessage({ type: 'playbackStopped', data: { reason: 'ended' } });
+                    return;
+                }
+
+                // 顺序播放：通知控制面板切换下一条
+                stopScroll();
+                channel.postMessage({ type: 'scriptEnded' });
+            }
+
+            function handleNoScrollableContent() {
+                if (playMode === 'sequence') {
+                    stopScroll();
+                    channel.postMessage({ type: 'scriptEnded' });
+                    return;
+                }
+                stopScroll();
+                channel.postMessage({ type: 'playbackStopped', data: { reason: 'no-scroll' } });
+            }
+
+            function startScroll() {
+                if (animationId) cancelAnimationFrame(animationId);
+                lastTimestamp = 0;
+                accumulatedDistance = 0;
+                
+                if (currentOrientation === 'left') {
+                    const maxScroll = scriptDiv.scrollWidth - scriptDiv.clientWidth;
+                    if (scriptDiv.scrollLeft >= maxScroll && maxScroll > 0) {
+                        scriptDiv.scrollLeft = 0;
+                    }
+                    isScrolling = true;
+                    animationId = requestAnimationFrame(performScrollHorizontal);
+                } else {
+                    const maxScroll = scriptDiv.scrollHeight - scriptDiv.clientHeight;
+                    if (scriptDiv.scrollTop >= maxScroll && maxScroll > 0) {
+                        scriptDiv.scrollTop = 0;
+                    }
+                    isScrolling = true;
+                    animationId = requestAnimationFrame(performScrollVertical);
+                }
+            }
+
+            function stopScroll() {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+                isScrolling = false;
+                lastTimestamp = 0;
+                accumulatedDistance = 0;
+            }
+
+            function resetScroll() {
+                stopScroll();
+                if (currentOrientation === 'left') {
+                    scriptDiv.scrollLeft = 0;
+                } else {
+                    scriptDiv.scrollTop = 0;
+                }
+                channel.postMessage({
+                    type: 'scrollUpdate',
+                    data: { scrollTop: 0, progress: 0, orientation: currentOrientation }
+                });
+            }
+
+            function scrollBy(delta) {
+                if (currentOrientation === 'left') {
+                    const max = scriptDiv.scrollWidth - scriptDiv.clientWidth;
+                    let newLeft = Math.min(max, Math.max(0, scriptDiv.scrollLeft + delta));
+                    scriptDiv.scrollLeft = newLeft;
+                    const progress = max > 0 ? (scriptDiv.scrollLeft / max) : 0;
+                    channel.postMessage({
+                        type: 'scrollUpdate',
+                        data: { scrollTop: scriptDiv.scrollLeft, progress, orientation: currentOrientation }
+                    });
+                } else {
+                    const max = scriptDiv.scrollHeight - scriptDiv.clientHeight;
+                    let newTop = Math.min(max, Math.max(0, scriptDiv.scrollTop + delta));
+                    scriptDiv.scrollTop = newTop;
+                    const progress = max > 0 ? (scriptDiv.scrollTop / max) : 0;
+                    channel.postMessage({
+                        type: 'scrollUpdate',
+                        data: { scrollTop: scriptDiv.scrollTop, progress, orientation: currentOrientation }
+                    });
+                }
+            }
+
+            channel.onmessage = (event) => {
+                const { type, data } = event.data;
+                
+                if (!isConnected) {
+                    isConnected = true;
+                    connectionDot.classList.add('connected');
+                    connectionText.textContent = '已连接控制面板';
+                }
+
+                switch (type) {
+                    case 'ping':
+                        channel.postMessage({ type: 'pong' });
+                        break;
+                        
+                    case 'setContent':
+                        scriptDiv.innerHTML = data.content || '<p style="color:#aaa;">等待内容...</p>';
+                        requestAnimationFrame(sendDisplayMetrics);
+                        break;
+                        
+                    case 'start':
+                        startScroll();
+                        showStatus('▶ 开始滚动');
+                        break;
+                        
+                    case 'pause':
+                        stopScroll();
+                        showStatus('⏸ 已暂停');
+                        break;
+                        
+                    case 'reset':
+                        resetScroll();
+                        showStatus('⟳ 已重置');
+                        break;
+                        
+                    case 'scrollBy':
+                        scrollBy(data.delta);
+                        break;
+                        
+                    case 'setSpeed':
+                        currentSpeedPxPerSec = mapSpeedToPxPerSec(data.speed);
+                        break;
+                        
+                    case 'setFontSize':
+                        scriptDiv.style.fontSize = data.fontSize + 'px';
+                        requestAnimationFrame(sendDisplayMetrics);
+                        break;
+                        
+                    case 'setFontFamily':
+                        scriptDiv.style.fontFamily = data.fontFamily;
+                        requestAnimationFrame(sendDisplayMetrics);
+                        break;
+                        
+                    case 'setColors':
+                        document.body.style.backgroundColor = data.bgColor || '#ffffff';
+                        container.style.backgroundColor = data.bgColor || '#ffffff';
+                        scriptDiv.style.backgroundColor = 'transparent';
+                        scriptDiv.style.color = data.textColor || '#000000';
+                        requestAnimationFrame(sendDisplayMetrics);
+                        break;
+                        
+                    case 'setMirror':
+                        scriptDiv.classList.remove('mirror-h', 'mirror-v', 'mirror-both');
+                        if (data.mirror === 'h') scriptDiv.classList.add('mirror-h');
+                        else if (data.mirror === 'v') scriptDiv.classList.add('mirror-v');
+                        else if (data.mirror === 'both') scriptDiv.classList.add('mirror-both');
+                        break;
+                        
+                    case 'setGuidePosition':
+                        updateGuidePosition(data.position);
+                        break;
+                        
+                    case 'setGuideStyle':
+                        guideLine.classList.remove('style-dashed', 'style-double', 'style-glow');
+                        if (data.style === 1) guideLine.classList.add('style-dashed');
+                        else if (data.style === 2) guideLine.classList.add('style-double');
+                        else if (data.style === 3) guideLine.classList.add('style-glow');
+                        break;
+                        
+                    case 'setGuideVisible':
+                        if (data.visible) {
+                            guideLine.classList.remove('hidden');
+                        } else {
+                            guideLine.classList.add('hidden');
+                        }
+                        break;
+
+                    case 'setOrientation':
+                        if (lastOrientation !== data.orientation) {
+                            lastOrientation = data.orientation;
+                            setOrientation(data.orientation);
+                            if (data.orientation === 'left') {
+                                showStatus('⬅️ 向左旋转');
+                            } else if (data.orientation === 'right') {
+                                showStatus('➡️ 向右旋转');
+                            } else {
+                                showStatus('↺ 正常方向');
+                            }
+                        }
+                        break;
+
+                    case 'setPlayMode':
+                        lastPlayMode = data.mode;
+                        playMode = data.mode === 'single' ? 'once' : (data.mode || 'once');
+                        break;
+                }
+            };
+
+            document.getElementById('fullscreenBtn').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.log('全屏请求失败:', err);
+                    });
+                    document.getElementById('fullscreenBtn').textContent = '退出全屏';
+                } else {
+                    document.exitFullscreen();
+                    document.getElementById('fullscreenBtn').textContent = '🖥️ 全屏';
+                }
+            });
+
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement) {
+                    document.getElementById('fullscreenBtn').textContent = '🖥️ 全屏';
+                }
+                requestAnimationFrame(sendDisplayMetrics);
+            });
+
+            hideBarBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                barHidden = !barHidden;
+                document.body.classList.toggle('bar-hidden', barHidden);
+                hideBarBtn.title = barHidden ? '显示顶栏' : '隐藏顶栏';
+                requestAnimationFrame(sendDisplayMetrics);
+            });
+
+            window.addEventListener('focus', () => {
+                notifyConnected();
+                requestAnimationFrame(sendDisplayMetrics);
+            });
+
+            window.addEventListener('resize', () => {
+                requestAnimationFrame(sendDisplayMetrics);
+            });
+
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', () => {
+                    document.body.style.height = `${window.visualViewport.height}px`;
+                });
+            }
+
+        })();
+    </script>
+</body>
+</html>
